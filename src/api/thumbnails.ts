@@ -4,16 +4,9 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { respondWithJSON } from "./json";
-import {
-  BadRequestError,
-  NotFoundError,
-  UserForbiddenError,
-} from "./errors";
+import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 
-export async function handlerUploadThumbnail(
-  cfg: ApiConfig,
-  req: BunRequest,
-) {
+export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
 
   if (!videoId) {
@@ -28,6 +21,10 @@ export async function handlerUploadThumbnail(
 
   if (!(file instanceof File)) {
     throw new BadRequestError("Thumbnail file missing");
+  }
+
+  if (file.type !== "image/jpeg" && file.type !== "image/png") {
+    throw new BadRequestError("Unsupported thumbnail type");
   }
 
   const MAX_UPLOAD_SIZE = 10 << 20;
@@ -47,14 +44,14 @@ export async function handlerUploadThumbnail(
   }
 
   const fileExtension = file.type.split("/")[1];
+
   const filename = `${videoId}.${fileExtension}`;
   const fullPath = path.join(cfg.assetsRoot, filename);
 
   const data = await file.arrayBuffer();
   await Bun.write(fullPath, data);
 
-  const thumbnailURL =
-    `http://localhost:${cfg.port}/assets/${filename}`;
+  const thumbnailURL = `http://localhost:${cfg.port}/assets/${filename}`;
 
   video.thumbnailURL = thumbnailURL;
 
