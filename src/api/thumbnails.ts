@@ -5,6 +5,7 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { respondWithJSON } from "./json";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import { randomBytes } from "node:crypto";
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
@@ -15,6 +16,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const token = getBearerToken(req.headers);
   const userID = validateJWT(token, cfg.jwtSecret);
+  const randomName = randomBytes(32).toString("base64url");
 
   const formData = await req.formData();
   const file = formData.get("thumbnail");
@@ -45,7 +47,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   const fileExtension = file.type.split("/")[1];
 
-  const filename = `${videoId}.${fileExtension}`;
+  const filename = `${randomName}.${fileExtension}`;
   const fullPath = path.join(cfg.assetsRoot, filename);
 
   const data = await file.arrayBuffer();
