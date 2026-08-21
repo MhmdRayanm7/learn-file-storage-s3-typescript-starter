@@ -63,3 +63,38 @@ bun run src/index.ts
 - You should see a new database file `tubely.db` created in the root directory.
 - You should see a new `assets` directory created in the root directory, this is where the images will be stored.
 - You should see a link in your console to open the local web page.
+
+
+## What I Learned
+
+- Local filesystem storage
+- Base64 and file uploads
+- MIME type and upload size validation
+- AWS S3 object storage
+- S3 object keys and prefixes
+- Public and private S3 buckets
+- IAM users, groups, policies, and roles
+- Principle of least privilege
+- Presigned URLs
+- Video aspect ratio detection with ffprobe
+- MP4 fast-start processing with FFmpeg
+- CloudFront CDN
+- CloudFront cache invalidations
+- S3 object versioning
+- Encryption at rest and in transit
+
+## Tech Stack
+
+- TypeScript
+- Bun
+- SQLite
+- AWS S3
+- AWS IAM
+- AWS CloudFront
+- FFmpeg / ffprobe
+
+## Notes
+
+This repository is based on the Boot.dev course starter project and was extended throughout the course exercises.
+
+All AWS resources created for the course were deleted after completion to avoid unnecessary charges.
