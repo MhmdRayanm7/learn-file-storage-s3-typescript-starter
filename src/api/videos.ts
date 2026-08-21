@@ -9,14 +9,10 @@ import { getBearerToken, validateJWT } from "../auth";
 import { getVideo, updateVideo } from "../db/videos";
 
 import { respondWithJSON } from "./json";
-import {
-  BadRequestError,
-  NotFoundError,
-  UserForbiddenError,
-} from "./errors";
+import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import exp from "node:constants";
 
 type VideoAspectRatio = "landscape" | "portrait" | "other";
-
 
 // Upload a video, detect its aspect ratio, and store it in S3
 export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
@@ -61,12 +57,10 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   if (file.type !== "video/mp4") {
     throw new BadRequestError("Unsupported video type");
   }
-
   // Save the uploaded video temporarily on disk
-  const tempPath = path.join(
-    tmpdir(),
-    `${videoId}-${randomUUID()}.mp4`,
-  );
+  const tempPath = path.join(tmpdir(), `${videoId}-${randomUUID()}.mp4`);
+
+  let processedTempPath: string | undefined;
 
   try {
     await Bun.write(tempPath, file);
@@ -74,20 +68,22 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     // Detect the video's aspect ratio
     const aspectRatio = await getVideoAspectRatio(tempPath);
 
+    // Create a fast-start version of the video
+    processedTempPath = await processVideoForFastStart(tempPath);
+
     // Use the aspect ratio as the S3 prefix
     const key = `${aspectRatio}/${videoId}.mp4`;
 
-    // Upload the temporary file to S3
-    const tempFile = Bun.file(tempPath);
+    // Upload the processed video to S3
+    const processedFile = Bun.file(processedTempPath);
     const s3File = cfg.s3Client.file(key);
 
-    await s3File.write(tempFile, {
+    await s3File.write(processedFile, {
       type: file.type,
     });
 
     // Save the S3 URL in the database
-    const videoURL =
-      `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
+    const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
 
     video.videoURL = videoURL;
 
@@ -95,11 +91,15 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
     return respondWithJSON(200, video);
   } finally {
-    // Always remove the temporary file
+    // Always remove the original temporary file
     await Bun.file(tempPath).delete();
+
+    // Remove the processed file if it was created
+    if (processedTempPath) {
+      await Bun.file(processedTempPath).delete();
+    }
   }
 }
-
 
 // Detect whether a video is landscape, portrait, or another aspect ratio
 export async function getVideoAspectRatio(
@@ -177,4 +177,42 @@ export async function getVideoAspectRatio(
   }
 
   return "other";
+}
+
+export async function processVideoForFastStart(
+  inputFilePath: string,
+): Promise<string> {
+  const outputFilePath = `${inputFilePath}.processed`;
+
+  const proc = Bun.spawn(
+    [
+      "ffmpeg",
+      "-i",
+      inputFilePath,
+      "-movflags",
+      "faststart",
+      "-map_metadata",
+      "0",
+      "-codec",
+      "copy",
+      "-f",
+      "mp4",
+      outputFilePath,
+    ],
+    {
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+
+  const stdoutText = await new Response(proc.stdout).text();
+  const stderrText = await new Response(proc.stderr).text();
+
+  const exitCode = await proc.exited;
+
+  if (exitCode !== 0) {
+    throw new Error(`ffmpeg failed: ${stderrText}`);
+  }
+
+  return outputFilePath;
 }
